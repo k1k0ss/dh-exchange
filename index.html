@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diffie-Hellman · Η Αποστολή του Κοινού Μυστικού</title>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.4/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #0a0618;
+    --bg-mid: #16102e;
+    --bg-soft: #221848;
+    --gold: #e6b85c;
+    --gold-soft: #d4a574;
+    --player: #6dd3fc;
+    --player-soft: #38bdf8;
+    --ed: #ef4444;
+    --ed-soft: #f87171;
+    --parchment: #f0e6d2;
+    --muted: #9b8fb5;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Outfit', system-ui, sans-serif;
+    background:
+      radial-gradient(ellipse at top, rgba(140, 90, 220, 0.18), transparent 60%),
+      radial-gradient(ellipse at bottom, rgba(230, 184, 92, 0.08), transparent 60%),
+      linear-gradient(135deg, #0a0618 0%, #16102e 50%, #221848 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    color: var(--parchment);
+    overflow-x: hidden;
+  }
+  .font-display { font-family: 'Cormorant Garamond', serif; letter-spacing: 0.02em; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Subtle grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.04;
+    z-index: 1;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  .glow-gold { text-shadow: 0 0 24px rgba(230, 184, 92, 0.5); }
+  .glow-player { text-shadow: 0 0 18px rgba(109, 211, 252, 0.5); }
+  .glow-ed { text-shadow: 0 0 18px rgba(239, 68, 68, 0.5); }
+
+  .border-gold { border-color: var(--gold); }
+  .ring-gold { box-shadow: 0 0 0 1px rgba(230, 184, 92, 0.4), 0 8px 32px -8px rgba(230, 184, 92, 0.2); }
+
+  @keyframes float-soft {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+  .animate-float { animation: float-soft 4s ease-in-out infinite; }
+
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(230, 184, 92, 0.5); }
+    70% { box-shadow: 0 0 0 18px rgba(230, 184, 92, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(230, 184, 92, 0); }
+  }
+  .pulse-gold { animation: pulse-ring 2s infinite; }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fade-up 0.5s ease-out forwards; }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateX(-24px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .slide-in { animation: slide-in 0.4s ease-out forwards; }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+  }
+  .shake { animation: shake 0.4s; }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .shimmer-text {
+    background: linear-gradient(90deg, var(--gold) 0%, #fff5d6 50%, var(--gold) 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 4s linear infinite;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg-deep); }
+  ::-webkit-scrollbar-thumb { background: rgba(230, 184, 92, 0.3); border-radius: 4px; }
+
+  /* Custom check + cross marks */
+  .speech-bubble {
+    position: relative;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(230, 184, 92, 0.2);
+    border-radius: 14px;
+    padding: 14px 18px;
+  }
+  .speech-bubble.ed {
+    border-color: rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.06);
+  }
+  .speech-bubble.player {
+    border-color: rgba(109, 211, 252, 0.3);
+    background: rgba(109, 211, 252, 0.06);
+  }
+
+  input.game-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(230, 184, 92, 0.4);
+    color: var(--parchment);
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    text-align: center;
+    width: 120px;
+    padding: 10px;
+    transition: all 0.2s;
+  }
+  input.game-input:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 4px rgba(230, 184, 92, 0.15);
+  }
+
+  button.game-btn {
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-soft) 100%);
+    color: #1a0f2e;
+    font-weight: 700;
+    padding: 12px 28px;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px -6px rgba(230, 184, 92, 0.5);
+  }
+  button.game-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px -6px rgba(230, 184, 92, 0.7); }
+  button.game-btn:active { transform: translateY(0); }
+  button.game-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  button.game-btn-ghost {
+    background: transparent;
+    color: var(--parchment);
+    border: 1.5px solid rgba(230, 184, 92, 0.4);
+    padding: 10px 24px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+  }
+  button.game-btn-ghost:hover { background: rgba(230, 184, 92, 0.1); border-color: var(--gold); }
+
+  .number-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    height: 56px;
+    padding: 0 18px;
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.75rem;
+    font-weight: 700;
+    border: 2px solid;
+    transition: all 0.3s;
+  }
+  .number-box.empty { color: rgba(255, 255, 255, 0.25); border-style: dashed; }
+  .number-box.private {
+    background: rgba(109, 211, 252, 0.1);
+    border-color: rgba(109, 211, 252, 0.4);
+    color: var(--player);
+  }
+  .number-box.public {
+    background: rgba(230, 184, 92, 0.1);
+    border-color: rgba(230, 184, 92, 0.5);
+    color: var(--gold);
+  }
+  .number-box.hidden-val {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(155, 143, 181, 0.4);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .number-box.hidden-val:hover { border-color: var(--gold); }
+
+  /* Drag and drop */
+  .drag-item {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1.5px solid rgba(230, 184, 92, 0.3);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin: 8px 0;
+    cursor: grab;
+    user-select: none;
+    transition: all 0.2s;
+  }
+  .drag-item:hover { border-color: var(--gold); background: rgba(230, 184, 92, 0.08); }
+  .drag-item.dragging { opacity: 0.4; cursor: grabbing; }
+  .drag-item.drag-over { border-color: var(--player); border-style: dashed; }
+
+  /* Building card on map */
+  .building-card {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.4s;
+  }
+  .building-card.locked { opacity: 0.25; cursor: not-allowed; filter: grayscale(0.5); }
+  .building-card.locked:hover { transform: none; }
+  .building-card:hover { transform: translateY(-6px); }
+  .building-card.completed { filter: drop-shadow(0 0 20px rgba(230, 184, 92, 0.4)); }
+
+  /* timer bar */
+  .timer-shell {
+    height: 14px;
+    background: rgba(239, 68, 68, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .timer-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ed) 0%, #f87171 100%);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+    transition: width 1s linear;
+  }
+
+  /* heart */
+  .heart {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    color: var(--ed);
+    transition: all 0.3s;
+  }
+  .heart.lost { color: rgba(255, 255, 255, 0.1); transform: scale(0.85); }
+
+  .fancy-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(230, 184, 92, 0.4), transparent);
+    margin: 12px 0;
+  }
+
+  .stage-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border: 1px solid rgba(230, 184, 92, 0.3);
+    color: var(--gold);
+    background: rgba(230, 184, 92, 0.05);
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+/* ============================== ICONS ============================== */
+const HeartIcon = ({ filled }) => (
+  <svg className={`heart ${filled ? '' : 'lost'}`} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 21s-7-4.35-7-10a4.5 4.5 0 0 1 8-2.83A4.5 4.5 0 0 1 19 11c0 5.65-7 10-7 10z"/>
+  </svg>
+);
+const KeyIcon = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="8" cy="15" r="4"/><path d="M10.85 12.15 19 4"/><path d="M18 5l3 3"/><path d="M15 8l3 3"/>
+  </svg>
+);
+const EyeIcon = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const LockIcon = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+  </svg>
+);
+const CheckIcon = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+);
+const XIcon = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+);
+
+/* ============================== HUD ============================== */
+const Hud = ({ lives, levelName, sceneTitle, sceneNum, totalScenes }) => (
+  <div className="fixed top-0 left-0 right-0 z-30 px-6 py-4 flex items-center justify-between"
+       style={{ background: 'linear-gradient(180deg, rgba(10,6,24,0.92) 0%, rgba(10,6,24,0) 100%)', backdropFilter: 'blur(8px)' }}>
+    <div className="flex items-center gap-4">
+      <div className="font-display text-xl glow-gold" style={{ color: 'var(--gold)' }}>◆ {levelName}</div>
+      {sceneTitle && (
+        <>
+          <div className="text-white/20">|</div>
+          <div className="flex flex-col">
+            <span className="stage-tag">Σκηνή {sceneNum}/{totalScenes}</span>
+            <span className="text-sm text-white/70 mt-1">{sceneTitle}</span>
+          </div>
+        </>
+      )}
+    </div>
+    <div className="flex items-center gap-2">
+      <span className="text-xs uppercase tracking-widest text-white/50 mr-2">Ζωές</span>
+      {[...Array(5)].map((_, i) => <HeartIcon key={i} filled={i < lives} />)}
+    </div>
+  </div>
+);
+
+/* ============================== START SCREEN ============================== */
+const StartScreen = ({ onStart }) => (
+  <div className="min-h-screen flex flex-col items-center justify-center px-6 relative">
+    <div className="text-center max-w-3xl fade-up">
+      <div className="stage-tag mb-6">Εκπαιδευτικό Παιχνίδι Κρυπτογραφίας</div>
+      <h1 className="font-display text-6xl md:text-8xl font-bold mb-4 leading-none">
+        <span className="shimmer-text">Diffie</span>
+        <span style={{ color: 'var(--parchment)' }}> · </span>
+        <span className="shimmer-text">Hellman</span>
+      </h1>
+      <div className="font-display italic text-2xl md:text-3xl mb-2" style={{ color: 'var(--gold-soft)' }}>
+        Η Αποστολή του Κοινού Μυστικού
+      </div>
+      <div className="fancy-divider w-32 mx-auto my-8"></div>
+      <p className="text-lg text-white/70 mb-12 max-w-xl mx-auto leading-relaxed">
+        Στοιχειώδης μύηση στο πρωτόκολλο δημόσιας ανταλλαγής κλειδιού.
+        Εσύ, ο Master και ο κρυφακουστής <span style={{ color: 'var(--ed-soft)' }}>ED</span> — ποιος θα νικήσει;
+      </p>
+      <button onClick={onStart} className="game-btn pulse-gold text-base px-12 py-4">
+        ▸ Έναρξη Αποστολής
+      </button>
+    </div>
+    <div className="absolute bottom-6 text-xs text-white/30 tracking-widest uppercase">
+      Πίστα 1 / 4 · Πάτησε START για να ξεκινήσεις
+    </div>
+  </div>
+);
+
+/* ============================== MAP SCREEN ============================== */
+const Building = ({ x, y, label, locked, completed, onClick, big }) => (
+  <div className={`building-card absolute ${locked ? 'locked' : ''} ${completed ? 'completed' : ''}`}
+       style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
+       onClick={!locked ? onClick : undefined}>
+    <svg width={big ? "140" : "120"} height={big ? "160" : "140"} viewBox="0 0 120 140">
+      {/* Building shape */}
+      <defs>
+        <linearGradient id={`bg-${label}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={completed ? "#e6b85c" : "#3d2d6e"}/>
+          <stop offset="100%" stopColor={completed ? "#a07c2a" : "#1a0f2e"}/>
+        </linearGradient>
+      </defs>
+      {/* Roof */}
+      <polygon points="60,5 10,40 110,40" fill={completed ? "#e6b85c" : "#4a3678"} stroke={completed ? "#fff5d6" : "#6b4ea0"} strokeWidth="2"/>
+      {/* Body */}
+      <rect x="18" y="40" width="84" height="90" fill={`url(#bg-${label})`} stroke={completed ? "#e6b85c" : "#6b4ea0"} strokeWidth="2" rx="3"/>
+      {/* Door */}
+      <rect x="48" y="85" width="24" height="45" fill="#0a0618" rx="12"/>
+      <circle cx="66" cy="108" r="2" fill={completed ? "#e6b85c" : "#9b8fb5"}/>
+      {/* Windows */}
+      <rect x="28" y="55" width="14" height="14" fill="#0a0618" rx="2"/>
+      <rect x="78" y="55" width="14" height="14" fill="#0a0618" rx="2"/>
+      <line x1="35" y1="55" x2="35" y2="69" stroke={completed ? "#e6b85c" : "#6b4ea0"} strokeWidth="1"/>
+      <line x1="28" y1="62" x2="42" y2="62" stroke={completed ? "#e6b85c" : "#6b4ea0"} strokeWidth="1"/>
+      <line x1="85" y1="55" x2="85" y2="69" stroke={completed ? "#e6b85c" : "#6b4ea0"} strokeWidth="1"/>
+      <line x1="78" y1="62" x2="92" y2="62" stroke={completed ? "#e6b85c" : "#6b4ea0"} strokeWidth="1"/>
+      {/* Banner */}
+      <rect x="40" y="42" width="40" height="10" fill={completed ? "#fff5d6" : "#9b8fb5"} opacity="0.9" rx="2"/>
+      <text x="60" y="50" textAnchor="middle" fontSize="8" fontFamily="Cormorant Garamond" fontWeight="700" fill="#1a0f2e">
+        {label}
+      </text>
+    </svg>
+    <div className="text-center mt-2">
+      {locked ? (
+        <div className="flex items-center justify-center gap-1 text-xs text-white/40">
+          <LockIcon className="w-3 h-3"/> Κλειδωμένο
+        </div>
+      ) : completed ? (
+        <div className="flex items-center justify-center gap-1 text-xs" style={{ color: 'var(--gold)' }}>
+          <CheckIcon className="w-3 h-3"/> Ολοκληρώθηκε
+        </div>
+      ) : (
+        <div className="text-xs text-white/70 animate-pulse">▸ Είσοδος</div>
+      )}
+    </div>
+  </div>
+);
+
+const MapScreen = ({ buildingsCompleted, onEnterBuilding, lives }) => {
+  const b1Done = buildingsCompleted.includes(1);
+  const b2Done = buildingsCompleted.includes(2);
+  return (
+    <div className="min-h-screen pt-24 pb-12 px-6 relative">
+      <Hud lives={lives} levelName="Πίστα 1 — Ο Χάρτης" />
+      <div className="max-w-5xl mx-auto fade-up">
+        <div className="text-center mb-2">
+          <div className="stage-tag mb-4">Πρώτη Πίστα</div>
+          <h2 className="font-display text-4xl md:text-5xl font-bold mb-3">Η Πόλη των Κωδικών</h2>
+          <p className="text-white/60 max-w-xl mx-auto">
+            Επισκέψου τα δύο κτήρια με τη σειρά. Κάθε Master έχει κάτι να σου διδάξει.
+          </p>
+        </div>
+
+        <div className="relative w-full mt-8" style={{ height: '500px' }}>
+          {/* Decorative path */}
+          <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+            <path d="M 25% 60% Q 50% 30% 75% 50%" stroke="rgba(230,184,92,0.3)" strokeWidth="2" strokeDasharray="6 8" fill="none"/>
+            <circle cx="25%" cy="60%" r="6" fill="var(--gold)" opacity="0.5"/>
+            <circle cx="75%" cy="50%" r="6" fill="var(--gold)" opacity="0.5"/>
+          </svg>
+          {/* Stars */}
+          {[...Array(20)].map((_, i) => (
+            <div key={i} className="absolute rounded-full animate-float"
+                 style={{
+                   left: `${(i * 53) % 100}%`,
+                   top: `${(i * 37) % 90}%`,
+                   width: '2px', height: '2px',
+                   background: 'rgba(230,184,92,0.5)',
+                   animationDelay: `${i * 0.2}s`
+                 }}/>
+          ))}
+
+          <Building x={25} y={60} label="I" locked={false} completed={b1Done}
+                    onClick={() => onEnterBuilding(1)} />
+          <Building x={75} y={50} label="II" locked={!b1Done} completed={b2Done}
+                    onClick={() => onEnterBuilding(2)} />
+        </div>
+
+        {!b1Done && (
+          <div className="mt-8 max-w-2xl mx-auto text-center fade-up">
+            <div className="speech-bubble inline-block">
+              <span className="font-display italic text-lg" style={{ color: 'var(--gold)' }}>
+                «Υποθέτουμε ότι κανείς δεν ξέρει διαίρεση...»
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ============================== CHARACTERS PANEL ============================== */
+const Avatar = ({ type, active, talking }) => {
+  const colors = {
+    player:  { fill: '#6dd3fc', glow: 'rgba(109,211,252,0.45)', name: 'ΕΣΥ', sub: 'Παίκτης' },
+    master:  { fill: '#e6b85c', glow: 'rgba(230,184,92,0.45)',  name: 'MASTER', sub: 'Δάσκαλος' },
+    ed:      { fill: '#ef4444', glow: 'rgba(239,68,68,0.45)',   name: 'ED', sub: 'Κρυφακουστής' },
+  }[type];
+
+  return (
+    <div className={`flex flex-col items-center transition-all duration-300 ${active ? 'scale-110' : 'opacity-60'}`}>
+      <div className="relative" style={{ filter: talking ? `drop-shadow(0 0 14px ${colors.glow})` : 'none' }}>
+        <svg width="70" height="70" viewBox="0 0 70 70">
+          {/* Head */}
+          <circle cx="35" cy="28" r="14" fill={colors.fill} opacity="0.25"/>
+          <circle cx="35" cy="28" r="11" fill="none" stroke={colors.fill} strokeWidth="2"/>
+          {/* Body */}
+          <path d="M 18 60 Q 18 44 35 44 Q 52 44 52 60" fill={colors.fill} opacity="0.25"/>
+          <path d="M 18 60 Q 18 44 35 44 Q 52 44 52 60" fill="none" stroke={colors.fill} strokeWidth="2"/>
+          {/* Type-specific accent */}
+          {type === 'master' && (
+            <>
+              <polygon points="28,18 35,8 42,18" fill={colors.fill} opacity="0.6"/>
+              <circle cx="35" cy="13" r="2" fill={colors.fill}/>
+            </>
+          )}
+          {type === 'ed' && (
+            <>
+              <path d="M 22 22 L 48 22" stroke={colors.fill} strokeWidth="2"/>
+              <rect x="24" y="24" width="8" height="6" rx="2" fill={colors.fill} opacity="0.4"/>
+              <rect x="38" y="24" width="8" height="6" rx="2" fill={colors.fill} opacity="0.4"/>
+            </>
+          )}
+          {type === 'player' && (
+            <circle cx="35" cy="28" r="3" fill={colors.fill}/>
+          )}
+        </svg>
+        {talking && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse" style={{ background: colors.fill }}/>
+        )}
+      </div>
+      <div className="text-center mt-2">
+        <div className="font-display text-sm font-bold tracking-wider" style={{ color: colors.fill }}>
+          {colors.name}
+        </div>
+        <div className="text-xs text-white/40">{colors.sub}</div>
+      </div>
+    </div>
+  );
+};
+
+const SpeechBubble = ({ from, children }) => (
+  <div className={`speech-bubble ${from} fade-up max-w-2xl`}>
+    <div className="text-xs uppercase tracking-widest mb-1.5 opacity-70" style={{
+      color: from === 'master' ? 'var(--gold)' : from === 'player' ? 'var(--player)' : 'var(--ed-soft)'
+    }}>
+      {from === 'master' ? 'Master' : from === 'player' ? 'Εσύ' : 'ED'} λέει
+    </div>
+    <div className="text-base text-white/90 leading-relaxed">{children}</div>
+  </div>
+);
+
+/* ============================== NUMBER BOXES PANEL ============================== */
+const NumberBox = ({ label, value, type, hidden, onPeek, peeked, helper }) => {
+  const display = hidden && !peeked ? '★ ★ ★' : (value !== null && value !== undefined && value !== '' ? value : '—');
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="text-[0.65rem] uppercase tracking-widest text-white/50">{label}</div>
+      <div className={`number-box ${type} ${hidden && !peeked ? 'hidden-val' : ''} ${value === null || value === undefined || value === '' ? 'empty' : ''}`}
+           onClick={hidden && !peeked && onPeek ? onPeek : undefined}
+           title={hidden && !peeked && onPeek ? 'Κλικ για να δεις τον αριθμό' : ''}>
+        {display}
+      </div>
+      {helper && <div className="text-[0.65rem] text-white/40 italic">{helper}</div>}
+    </div>
+  );
+};
+
+/* ============================== MULTIPLE CHOICE TEST ============================== */
+const MultipleChoiceTest = ({ question, options, correctIndex, onPass, onFail }) => {
+  const [selected, setSelected] = useState(null);
+  const [answered, setAnswered] = useState(false);
+
+  const handleSelect = (i) => {
+    if (answered) return;
+    setSelected(i);
+    setAnswered(true);
+    setTimeout(() => {
+      if (i === correctIndex) onPass();
+      else onFail();
+    }, 1100);
+  };
+
+  return (
+    <div className="min-h-screen pt-24 pb-12 px-6 flex items-center justify-center">
+      <div className="max-w-2xl w-full fade-up">
+        <div className="text-center mb-6">
+          <div className="stage-tag mb-3" style={{ borderColor: 'rgba(239,68,68,0.4)', color: 'var(--ed-soft)' }}>
+            ⚠ Test ανάκλησης
+          </div>
+          <h2 className="font-display text-3xl md:text-4xl font-bold mb-3">Σκέψου Προσεκτικά</h2>
+          <p className="text-white/70">{question}</p>
+        </div>
+        <div className="space-y-3">
+          {options.map((opt, i) => {
+            const isCorrect = answered && i === correctIndex;
+            const isWrong = answered && i === selected && i !== correctIndex;
+            return (
+              <button key={i} onClick={() => handleSelect(i)}
+                      disabled={answered}
+                      className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center gap-3
+                        ${isCorrect ? 'border-emerald-400 bg-emerald-400/10' :
+                          isWrong ? 'border-red-400 bg-red-400/10 shake' :
+                          selected === i ? 'border-amber-400 bg-amber-400/10' :
+                          'border-white/15 bg-white/5 hover:border-amber-400/60 hover:bg-amber-400/5'}`}
+                      style={{ cursor: answered ? 'default' : 'pointer' }}>
+                <span className="font-mono text-xs px-2 py-1 rounded bg-white/10">{String.fromCharCode(65 + i)}</span>
+                <span className="flex-1">{opt}</span>
+                {isCorrect && <CheckIcon className="w-5 h-5 text-emerald-400"/>}
+                {isWrong && <XIcon className="w-5 h-5 text-red-400"/>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ============================== DRAG & DROP TEST ============================== */
+const DragDropTest = ({ onPass, onFail }) => {
+  const correctOrder = [
+    'Επιλογή Ιδιωτικού Αριθμού',
+    'Επιλογή Δημόσιου Αριθμού',
+    'Δημιουργία Δημόσιου-Ιδιωτικού Αριθμού',
+    'Δημιουργία Κοινού Μυστικού Αριθμού',
+  ];
+  // Shuffled initial order
+  const [items, setItems] = useState([
+    'Δημιουργία Κοινού Μυστικού Αριθμού',
+    'Επιλογή Δημόσιου Αριθμού',
+    'Επιλογή Ιδιωτικού Αριθμού',
+    'Δημιουργία Δημόσιου-Ιδιωτικού Αριθμού',
+  ]);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [correct, setCorrect] = useState(false);
+
+  const handleDragStart = (i) => setDragIdx(i);
+  const handleDragOver = (e, i) => { e.preventDefault(); setOverIdx(i); };
+  const handleDrop = (i) => {
+    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
+    const next = [...items];
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(i, 0, moved);
+    setItems(next);
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
+  const submit = () => {
+    const ok = items.every((v, i) => v === correctOrder[i]);
+    setCorrect(ok);
+    setSubmitted(true);
+    setTimeout(() => ok ? onPass() : onFail(), 1400);
+  };
+
+  return (
+    <div className="min-h-screen pt-24 pb-12 px-6 flex items-center justify-center">
+      <div className="max-w-2xl w-full fade-up">
+        <div className="text-center mb-6">
+          <div className="stage-tag mb-3">Test Σειράς Βημάτων</div>
+          <h2 className="font-display text-3xl md:text-4xl font-bold mb-3">Σύρε στη Σωστή Σειρά</h2>
+          <p className="text-white/70">Ποια είναι η σωστή σειρά των βημάτων του πρωτοκόλλου;</p>
+        </div>
+        <div>
+          {items.map((item, i) => (
+            <div key={item}
+                 draggable={!submitted}
+                 onDragStart={() => handleDragStart(i)}
+                 onDragOver={(e) => handleDragOver(e, i)}
+                 onDrop={() => handleDrop(i)}
+                 onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+                 className={`drag-item ${dragIdx === i ? 'dragging' : ''} ${overIdx === i && dragIdx !== i ? 'drag-over' : ''}
+                   ${submitted ? (item === correctOrder[i] ? 'border-emerald-400/60 bg-emerald-400/10' : 'border-red-400/60 bg-red-400/10') : ''}`}
+                 style={{ cursor: submitted ? 'default' : 'grab' }}>
+              <div className="flex items-center gap-4">
+                <span className="font-mono text-sm px-2.5 py-1 rounded" style={{ background: 'rgba(230,184,92,0.15)', color: 'var(--gold)' }}>
+                  {i + 1}
+                </span>
+                <span className="flex-1">{item}</span>
+                <span className="text-white/30 text-xl">⋮⋮</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="text-center mt-8">
+          <button onClick={submit} disabled={submitted} className="game-btn">
+            ▸ Επιβεβαίωση
+          </button>
+        </div>
+        {submitted && (
+          <div className={`mt-6 text-center font-display text-2xl ${correct ? 'text-emerald-400' : 'text-red-400'}`}>
+            {correct ? '✓ Σωστά!' : '✗ Λάθος σειρά'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ============================== TIMER BAR ============================== */
+const TimerBar = ({ remaining, total }) => (
+  <div className="fixed left-0 right-0 z-20 px-6" style={{ top: '76px' }}>
+    <div className="max-w-3xl mx-auto">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-widest" style={{ color: 'var(--ed-soft)' }}>
+          <span className="inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse"/>
+          ED αναζητά τον Ιδιωτικό
+        </div>
+        <div className="font-mono text-sm" style={{ color: 'var(--ed-soft)' }}>
+          {remaining}s
+        </div>
+      </div>
+      <div className="timer-shell">
+        <div className="timer-fill" style={{ width: `${(remaining / total) * 100}%` }}/>
+      </div>
+    </div>
+  </div>
+);
+
+/* ============================== STAGE FRAME ============================== */
+const StageFrame = ({ children, lives, levelName, sceneTitle, sceneNum, totalScenes, edTimer, edTotalTime }) => (
+  <div className="min-h-screen pb-12">
+    <Hud lives={lives} levelName={levelName} sceneTitle={sceneTitle} sceneNum={sceneNum} totalScenes={totalScenes}/>
+    {edTimer !== null && <TimerBar remaining={edTimer} total={edTotalTime}/>}
+    <div className={`max-w-5xl mx-auto px-4 ${edTimer !== null ? 'pt-32' : 'pt-24'}`}>
+      {children}
+    </div>
+  </div>
+);
+
+/* ============================== BUILDING 1 — SCENES ============================== */
+
+// Helper: number ranges
+const PLAYER_PRIVATE_MIN = 2, PLAYER_PRIVATE_MAX = 9;
+const PUBLIC_MIN = 3, PUBLIC_MAX = 8;
+const MASTER_PRIVATE_B1 = 4;
+const MASTER_PUBLIC_B1 = 5;
+const MASTER_PRIVATE_B2 = 6;
+
+const Scene1_PickPrivate = ({ state, setState, advance }) => {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const [peeked, setPeeked] = useState(false);
+
+  const validate = () => {
+    const n = Number(input);
+    if (!Number.isInteger(n)) { setError('Εισήγαγε ακέραιο αριθμό.'); return; }
+    if (n < PLAYER_PRIVATE_MIN || n > PLAYER_PRIVATE_MAX) {
+      setError(`Πρέπει να είναι μεταξύ ${PLAYER_PRIVATE_MIN} και ${PLAYER_PRIVATE_MAX}.`);
+      return;
+    }
+    setError('');
+    setState(s => ({ ...s, player: { ...s.player, private: n } }));
+    setTimeout(advance, 500);
+  };
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active talking/>
+        <Avatar type="master" active talking/>
+        <Avatar type="ed" active={false}/>
+      </div>
+
+      <SpeechBubble from="master">
+        Καλώς ήρθες! Θα δημιουργήσουμε μαζί έναν <em>Κοινό Μυστικό Αριθμό</em>.
+        Διάλεξε έναν <strong style={{ color: 'var(--player)' }}>Ιδιωτικό Αριθμό</strong> από {PLAYER_PRIVATE_MIN} έως {PLAYER_PRIVATE_MAX}.
+        Δεν θα τον δω ούτε εγώ — μένει δικός σου. Θα διαλέξω κι εγώ τον δικό μου ταυτόχρονα.
+      </SpeechBubble>
+
+      <div className="grid md:grid-cols-2 gap-8 items-center">
+        <div className="speech-bubble player">
+          <div className="text-xs uppercase tracking-widest mb-2 opacity-70" style={{ color: 'var(--player)' }}>
+            Η σειρά σου
+          </div>
+          <div className="flex items-end gap-3 flex-wrap">
+            <input className="game-input" type="number" placeholder="?"
+                   value={input} onChange={e => setInput(e.target.value)}
+                   min={PLAYER_PRIVATE_MIN} max={PLAYER_PRIVATE_MAX}/>
+            <button className="game-btn" onClick={validate}>Επιλογή</button>
+          </div>
+          {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+        </div>
+
+        <div className="text-center">
+          <NumberBox label="Ιδιωτικός του Master" value={MASTER_PRIVATE_B1}
+                     type="private" hidden onPeek={() => setPeeked(true)} peeked={peeked}
+                     helper={peeked ? 'Έκλεψες μια ματιά! 👁' : 'Κλικ για ματιά (Πίστα 1)'}/>
+        </div>
+      </div>
+
+      <SpeechBubble from="ed">
+        Χμ... Δεν βλέπω κανέναν αριθμό. Αναρωτιέμαι ποιους διάλεξαν...
+      </SpeechBubble>
+    </div>
+  );
+};
+
+const Scene2_MasterPicksPublic = ({ state, advance }) => {
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setRevealed(true), 800);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active/>
+        <Avatar type="master" active talking/>
+        <Avatar type="ed" active talking={revealed}/>
+      </div>
+
+      <SpeechBubble from="master">
+        Τώρα θα διαλέξω έναν <strong style={{ color: 'var(--gold)' }}>Δημόσιο Αριθμό</strong> που θα τον βλέπουν όλοι —
+        ακόμα και ο ED. Είναι το «κοινό σημείο εκκίνησης» μας.
+      </SpeechBubble>
+
+      <div className="flex items-center justify-center gap-8 my-8">
+        <NumberBox label="Ιδιωτικός σου" value={state.player.private} type="private"/>
+        <div className="text-3xl text-white/30">·</div>
+        <NumberBox label="Δημόσιος (από Master)" value={revealed ? MASTER_PUBLIC_B1 : null} type="public"
+                   helper={revealed ? '✓ Ορατός σε όλους' : 'Επιλέγει...'}/>
+        <div className="text-3xl text-white/30">·</div>
+        <NumberBox label="Ιδιωτικός Master" value={null} type="private" hidden peeked={false}/>
+      </div>
+
+      {revealed && (
+        <SpeechBubble from="ed">
+          Ωραία! Τώρα ξέρω αυτόν τον αριθμό. Θα τον χρησιμοποιήσω σύντομα...
+        </SpeechBubble>
+      )}
+
+      {revealed && (
+        <div className="text-center mt-6">
+          <button className="game-btn" onClick={advance}>Συνέχεια ▸</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Scene3_PublicPrivate = ({ state, setState, advance, loseLife }) => {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const [shaking, setShaking] = useState(false);
+  const correct = state.player.private * MASTER_PUBLIC_B1;
+
+  const submit = () => {
+    const n = Number(input);
+    if (n === correct) {
+      setError('');
+      setState(s => ({ ...s, player: { ...s.player, publicPrivate: n }, master: { ...s.master, publicPrivate: MASTER_PRIVATE_B1 * MASTER_PUBLIC_B1 } }));
+      setTimeout(advance, 600);
+    } else {
+      setShaking(true);
+      setError('Λάθος υπολογισμός! Χάνεις μία ζωή...');
+      setTimeout(() => { setShaking(false); loseLife('public-private-1'); }, 900);
+    }
+  };
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active talking/>
+        <Avatar type="master" active talking/>
+        <Avatar type="ed" active/>
+      </div>
+
+      <SpeechBubble from="master">
+        Τώρα φτιάξε τον <strong style={{ color: 'var(--gold)' }}>Δημόσιο-Ιδιωτικό</strong> σου:
+        <span className="font-mono mx-2 px-2 py-0.5 rounded bg-white/10">Ιδιωτικός × Δημόσιος</span>.
+        Θα τον δείξουμε σε όλους — αλλά κανείς δεν μπορεί να βγάλει από αυτόν τον δικό σου Ιδιωτικό
+        (αφού κανείς δεν ξέρει διαίρεση 😉).
+      </SpeechBubble>
+
+      <div className="grid md:grid-cols-2 gap-6 items-center">
+        <div className="speech-bubble player">
+          <div className="text-xs uppercase tracking-widest mb-2 opacity-70" style={{ color: 'var(--player)' }}>
+            Υπολογισμός
+          </div>
+          <div className="flex items-center gap-3 flex-wrap mb-3">
+            <NumberBox value={state.player.private} type="private" label="Ιδιωτικός"/>
+            <span className="text-2xl" style={{ color: 'var(--gold)' }}>×</span>
+            <NumberBox value={MASTER_PUBLIC_B1} type="public" label="Δημόσιος"/>
+            <span className="text-2xl" style={{ color: 'var(--gold)' }}>=</span>
+            <input className={`game-input ${shaking ? 'shake' : ''}`}
+                   type="number" placeholder="?"
+                   value={input} onChange={e => setInput(e.target.value)}/>
+          </div>
+          <button className="game-btn mt-2" onClick={submit}>Επιβεβαίωση</button>
+          {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+        </div>
+
+        <div className="text-center">
+          <NumberBox label="Δημόσιος-Ιδιωτικός Master" value={MASTER_PRIVATE_B1 * MASTER_PUBLIC_B1}
+                     type="public" helper="Ο υπολογιστής τον υπολογίζει αυτόματα"/>
+        </div>
+      </div>
+
+      <SpeechBubble from="ed">
+        Βλέπω τον Δημόσιο-Ιδιωτικό σου, αλλά χωρίς διαίρεση δεν μπορώ να βρω τον Ιδιωτικό σου...
+      </SpeechBubble>
+    </div>
+  );
+};
+
+const Scene4_CommonSecret = ({ state, setState, advance, loseLife, gainLife }) => {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const [shaking, setShaking] = useState(false);
+  const masterPubPriv = MASTER_PRIVATE_B1 * MASTER_PUBLIC_B1; // 20
+  const correct = masterPubPriv * state.player.private;
+
+  const submit = () => {
+    const n = Number(input);
+    if (n === correct) {
+      setError('');
+      setState(s => ({ ...s, player: { ...s.player, commonSecret: n }, master: { ...s.master, commonSecret: n } }));
+      gainLife();
+      setTimeout(advance, 700);
+    } else {
+      setShaking(true);
+      setError('Λάθος Κοινός Μυστικός! Χάνεις μία ζωή...');
+      setTimeout(() => { setShaking(false); loseLife('common-secret-1'); }, 900);
+    }
+  };
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active talking/>
+        <Avatar type="master" active talking/>
+        <Avatar type="ed" active/>
+      </div>
+
+      <SpeechBubble from="master">
+        Το τελευταίο βήμα: φτιάξε τον <strong style={{ color: 'var(--gold)' }}>Κοινό Μυστικό Αριθμό</strong>.
+        Πάρε τον <em>δικό μου Δημόσιο-Ιδιωτικό</em> και πολλαπλασίασέ τον με τον <em>δικό σου Ιδιωτικό</em>.
+        Κάνω κι εγώ το ίδιο με αντίστροφη σειρά — και θα βγάλουμε το ίδιο νούμερο! 🪄
+      </SpeechBubble>
+
+      <div className="grid md:grid-cols-2 gap-6 items-start">
+        <div className="speech-bubble player">
+          <div className="text-xs uppercase tracking-widest mb-2 opacity-70" style={{ color: 'var(--player)' }}>
+            Υπολογισμός
+          </div>
+          <div className="flex items-center gap-3 flex-wrap mb-3">
+            <NumberBox value={masterPubPriv} type="public" label="ΔημΙδ Master"/>
+            <span className="text-2xl" style={{ color: 'var(--gold)' }}>×</span>
+            <NumberBox value={state.player.private} type="private" label="Ιδιωτικός σου"/>
+            <span className="text-2xl" style={{ color: 'var(--gold)' }}>=</span>
+            <input className={`game-input ${shaking ? 'shake' : ''}`} type="number"
+                   placeholder="?" value={input} onChange={e => setInput(e.target.value)}/>
+          </div>
+          <button className="game-btn mt-2" onClick={submit}>Επιβεβαίωση</button>
+          {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+        </div>
+
+        <div className="text-center">
+          <NumberBox label="Κοινός Μυστικός Master" value={null} type="private" hidden peeked={false}
+                     helper="Κρυφός — υπολογίζεται από Master"/>
+        </div>
+      </div>
+
+      <SpeechBubble from="ed">
+        Δεν μπορώ να βρω τον Κοινό Μυστικό χωρίς να ξέρω έναν από τους Ιδιωτικούς σας.
+        Είμαι μπλοκαρισμένος! 😤
+      </SpeechBubble>
+    </div>
+  );
+};
+
+/* ============================== BUILDING 2 — SCENES ============================== */
+
+const Scene5_NewPrivate = ({ state, setState, advance }) => {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+
+  const submit = () => {
+    const n = Number(input);
+    if (!Number.isInteger(n) || n < PLAYER_PRIVATE_MIN || n > PLAYER_PRIVATE_MAX) {
+      setError(`Πρέπει να είναι ακέραιος ${PLAYER_PRIVATE_MIN}-${PLAYER_PRIVATE_MAX}.`);
+      return;
+    }
+    setError('');
+    setState(s => ({ ...s, player: { ...s.player, private: n } }));
+    setTimeout(advance, 500);
+  };
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active talking/>
+        <Avatar type="master" active talking/>
+        <Avatar type="ed" active={false}/>
+      </div>
+
+      <SpeechBubble from="master">
+        Καλώς ήρθες στο δεύτερο κτήριο! Ξέρεις πια τη διαδικασία.
+        Διάλεξε ξανά έναν <strong style={{ color: 'var(--player)' }}>Ιδιωτικό Αριθμό</strong> ({PLAYER_PRIVATE_MIN}–{PLAYER_PRIVATE_MAX}).
+        Αυτή τη φορά <em>χωρίς ματιές</em> στον δικό μου!
+      </SpeechBubble>
+
+      <div className="grid md:grid-cols-2 gap-8 items-center">
+        <div className="speech-bubble player">
+          <div className="flex items-end gap-3 flex-wrap">
+            <input className="game-input" type="number" placeholder="?"
+                   value={input} onChange={e => setInput(e.target.value)}/>
+            <button className="game-btn" onClick={submit}>Επιλογή</button>
+          </div>
+          {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+        </div>
+        <div className="text-center">
+          <NumberBox label="Ιδιωτικός Master" value={MASTER_PRIVATE_B2} type="private" hidden peeked={false}
+                     helper="Δεν μπορείς να τον δεις αυτή τη φορά"/>
+        </div>
+      </div>
+
+      <SpeechBubble from="ed">
+        Ξανά μυστικά... αλλά αυτή τη φορά είμαι έτοιμος. Θα δοκιμάσω <em>όλους</em> τους πιθανούς αριθμούς.
+      </SpeechBubble>
+    </div>
+  );
+};
+
+const Scene6_PlayerPicksPublic = ({ state, setState, advance }) => {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+
+  const submit = () => {
+    const n = Number(input);
+    if (!Number.isInteger(n) || n < PUBLIC_MIN || n > PUBLIC_MAX) {
+      setError(`Ο Δημόσιος πρέπει να είναι ${PUBLIC_MIN}-${PUBLIC_MAX}.`);
+      return;
+    }
+    setError('');
+    setState(s => ({ ...s, publicNumber: n, edTimerActive: true }));
+    setTimeout(advance, 500);
+  };
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active talking/>
+        <Avatar type="master" active/>
+        <Avatar type="ed" active talking/>
+      </div>
+
+      <SpeechBubble from="master">
+        Σειρά σου να επιλέξεις τον <strong style={{ color: 'var(--gold)' }}>Δημόσιο Αριθμό</strong>!
+        Πληκτρολόγησε έναν αριθμό από {PUBLIC_MIN} έως {PUBLIC_MAX}. Θα τον βλέπουν όλοι.
+      </SpeechBubble>
+
+      <div className="grid md:grid-cols-2 gap-8 items-center">
+        <div className="speech-bubble player">
+          <div className="text-xs uppercase tracking-widest mb-2 opacity-70" style={{ color: 'var(--player)' }}>
+            Επιλογή Δημόσιου
+          </div>
+          <div className="flex items-end gap-3 flex-wrap">
+            <input className="game-input" type="number" placeholder="?"
+                   value={input} onChange={e => setInput(e.target.value)}/>
+            <button className="game-btn" onClick={submit}>Επιβεβαίωση</button>
+          </div>
+          {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+        </div>
+
+        <div className="text-center">
+          <NumberBox label="Ιδιωτικός σου" value={state.player.private} type="private"/>
+        </div>
+      </div>
+
+      <SpeechBubble from="ed">
+        Ξέρω πώς φτιάχνετε Δημόσιο-Ιδιωτικό. Θα δοκιμάσω κάθε πιθανό αριθμό × Δημόσιο
+        μέχρι να βρω αυτόν που σας ταιριάζει! Ο χρόνος μετράει αντίστροφα. ⏳
+      </SpeechBubble>
+    </div>
+  );
+};
+
+const Scene7_PublicPrivateB2 = ({ state, setState, advance, loseLife }) => {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const [shaking, setShaking] = useState(false);
+  const correct = state.player.private * state.publicNumber;
+
+  const submit = () => {
+    const n = Number(input);
+    if (n === correct) {
+      setError('');
+      setState(s => ({
+        ...s,
+        player: { ...s.player, publicPrivate: n },
+        master: { ...s.master, publicPrivate: MASTER_PRIVATE_B2 * s.publicNumber }
+      }));
+      setTimeout(advance, 600);
+    } else {
+      setShaking(true);
+      setError('Λάθος! Χάνεις ζωή — και ο ED πλησιάζει...');
+      setTimeout(() => { setShaking(false); loseLife('public-private-2'); }, 900);
+    }
+  };
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active talking/>
+        <Avatar type="master" active talking/>
+        <Avatar type="ed" active talking/>
+      </div>
+
+      <SpeechBubble from="master">
+        Φτιάξε ξανά τον Δημόσιο-Ιδιωτικό σου: <span className="font-mono mx-1">Ιδιωτικός × Δημόσιος</span>.
+        Γρήγορα — ο ED είναι σε εγρήγορση!
+      </SpeechBubble>
+
+      <div className="speech-bubble player">
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          <NumberBox value={state.player.private} type="private" label="Ιδιωτικός"/>
+          <span className="text-2xl" style={{ color: 'var(--gold)' }}>×</span>
+          <NumberBox value={state.publicNumber} type="public" label="Δημόσιος"/>
+          <span className="text-2xl" style={{ color: 'var(--gold)' }}>=</span>
+          <input className={`game-input ${shaking ? 'shake' : ''}`} type="number"
+                 placeholder="?" value={input} onChange={e => setInput(e.target.value)}/>
+        </div>
+        <button className="game-btn mt-2" onClick={submit}>Επιβεβαίωση</button>
+        {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+      </div>
+
+      <SpeechBubble from="ed">
+        Δοκιμάζω... 2×{state.publicNumber}={2*state.publicNumber}, 3×{state.publicNumber}={3*state.publicNumber}, 4×{state.publicNumber}={4*state.publicNumber}...
+        Κάποιο θα ταιριάξει σύντομα!
+      </SpeechBubble>
+    </div>
+  );
+};
+
+const Scene8_CommonSecretB2 = ({ state, setState, advance, loseLife, gainLife }) => {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const [shaking, setShaking] = useState(false);
+  const masterPubPriv = MASTER_PRIVATE_B2 * state.publicNumber;
+  const correct = masterPubPriv * state.player.private;
+
+  const submit = () => {
+    const n = Number(input);
+    if (n === correct) {
+      setError('');
+      setState(s => ({ ...s, player: { ...s.player, commonSecret: n }, edTimerActive: false }));
+      gainLife();
+      setTimeout(advance, 700);
+    } else {
+      setShaking(true);
+      setError('Λάθος! Χάνεις ζωή...');
+      setTimeout(() => { setShaking(false); loseLife('common-secret-2'); }, 900);
+    }
+  };
+
+  return (
+    <div className="space-y-6 fade-up">
+      <div className="grid grid-cols-3 gap-6 mb-2">
+        <Avatar type="player" active talking/>
+        <Avatar type="master" active talking/>
+        <Avatar type="ed" active talking/>
+      </div>
+
+      <SpeechBubble from="master">
+        Τελευταίο βήμα: <strong style={{ color: 'var(--gold)' }}>Κοινός Μυστικός Αριθμός</strong>!
+        Πάρε τον δικό μου Δημόσιο-Ιδιωτικό × τον δικό σου Ιδιωτικό. Κλείσε τη συμφωνία πριν ο ED σε προλάβει!
+      </SpeechBubble>
+
+      <div className="speech-bubble player">
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          <NumberBox value={masterPubPriv} type="public" label="ΔημΙδ Master"/>
+          <span className="text-2xl" style={{ color: 'var(--gold)' }}>×</span>
+          <NumberBox value={state.player.private} type="private" label="Ιδιωτικός σου"/>
+          <span className="text-2xl" style={{ color: 'var(--gold)' }}>=</span>
+          <input className={`game-input ${shaking ? 'shake' : ''}`} type="number"
+                 placeholder="?" value={input} onChange={e => setInput(e.target.value)}/>
+        </div>
+        <button className="game-btn mt-2" onClick={submit}>Επιβεβαίωση</button>
+        {error && <div className="text-red-400 text-sm mt-3">{error}</div>}
+      </div>
+
+      <SpeechBubble from="ed">
+        Συνεχίζω... αν τελειώσει ο χρόνος και βρω έναν Ιδιωτικό, ο Κοινός Μυστικός γίνεται δικός μου! 😈
+      </SpeechBubble>
+    </div>
+  );
+};
+
+/* ============================== END SCREENS ============================== */
+
+const LevelCompleteScreen = ({ commonSecret, onNext }) => (
+  <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="text-center max-w-2xl fade-up">
+      <div className="text-7xl mb-4">🎉</div>
+      <div className="stage-tag mb-4" style={{ borderColor: 'rgba(110,231,183,0.4)', color: '#6ee7b7' }}>
+        Πίστα Ολοκληρώθηκε
+      </div>
+      <h1 className="font-display text-5xl md:text-6xl font-bold mb-3 shimmer-text">Νίκη!</h1>
+      <p className="text-xl text-white/80 mb-2">
+        Εσύ και ο Master μοιράζεστε τον ίδιο Κοινό Μυστικό
+      </p>
+      <div className="my-8">
+        <div className="inline-block speech-bubble">
+          <div className="text-xs uppercase tracking-widest mb-2 text-white/60">Κοινός Μυστικός Αριθμός</div>
+          <div className="font-mono text-5xl font-bold glow-gold" style={{ color: 'var(--gold)' }}>{commonSecret}</div>
+        </div>
+      </div>
+      <p className="text-white/60 mb-8 italic">
+        «Σε αυτή την πίστα δεν υπήρχε διαίρεση. Στην επόμενη όλοι θα ξέρουν διαίρεση —
+        θα χρειαστείς πιο σοβαρά εργαλεία...»
+      </p>
+      <button className="game-btn" onClick={onNext}>▸ Επόμενη Πίστα</button>
+    </div>
+  </div>
+);
+
+const GameOverScreen = ({ reason, onRestart }) => (
+  <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="text-center max-w-xl fade-up">
+      <div className="text-7xl mb-4">💔</div>
+      <div className="stage-tag mb-4" style={{ borderColor: 'rgba(239,68,68,0.4)', color: 'var(--ed-soft)' }}>
+        Game Over
+      </div>
+      <h1 className="font-display text-5xl md:text-6xl font-bold mb-4 glow-ed" style={{ color: 'var(--ed)' }}>
+        Ο ED Νίκησε
+      </h1>
+      <p className="text-lg text-white/70 mb-8">{reason}</p>
+      <button className="game-btn" onClick={onRestart}>▸ Νέα Προσπάθεια</button>
+    </div>
+  </div>
+);
+
+/* ============================== APP ============================== */
+
+const SCENE_INFO_B1 = [
+  { num: 1, title: 'Επιλογή Ιδιωτικού' },
+  { num: 2, title: 'Master επιλέγει Δημόσιο' },
+  { num: 3, title: 'Δημόσιος-Ιδιωτικός' },
+  { num: 4, title: 'Κοινός Μυστικός' },
+];
+const SCENE_INFO_B2 = [
+  { num: 5, title: 'Test σειράς + νέος Ιδιωτικός' },
+  { num: 6, title: 'Επιλογή Δημόσιου' },
+  { num: 7, title: 'Δημόσιος-Ιδιωτικός (υπό πίεση)' },
+  { num: 8, title: 'Κοινός Μυστικός (φινάλε)' },
+];
+const ED_TOTAL_TIME = 60;
+
+const initialState = () => ({
+  screen: 'start',           // start | map | building1 | building2 | level-complete | game-over
+  scene: 1,
+  lives: 5,
+  player: { private: null, publicPrivate: null, commonSecret: null },
+  master: { private: null, publicPrivate: null, commonSecret: null },
+  publicNumber: null,
+  edTimer: ED_TOTAL_TIME,
+  edTimerActive: false,
+  buildingsCompleted: [],
+  test: null,                // { type, source, returnTo } when test active
+  building2Started: false,   // track if drag-drop test passed
+  gameOverReason: '',
+});
+
+const App = () => {
+  const [state, setState] = useState(initialState);
+
+  /* ----- ED Timer for Building 2 ----- */
+  useEffect(() => {
+    if (!state.edTimerActive) return;
+    if (state.edTimer <= 0) {
+      setState(s => ({ ...s, screen: 'game-over', edTimerActive: false,
+        gameOverReason: 'Ο ED βρήκε έναν από τους Ιδιωτικούς Αριθμούς πριν προλάβετε να ανταλλάξετε τον Κοινό Μυστικό.' }));
+      return;
+    }
+    const t = setTimeout(() => setState(s => ({ ...s, edTimer: s.edTimer - 1 })), 1000);
+    return () => clearTimeout(t);
+  }, [state.edTimer, state.edTimerActive]);
+
+  /* ----- Lives helpers ----- */
+  const loseLife = useCallback((source) => {
+    setState(s => {
+      const newLives = s.lives - 1;
+      if (newLives <= 0) {
+        return { ...s, lives: 0, screen: 'game-over', edTimerActive: false,
+          gameOverReason: 'Έχασες όλες τις ζωές σου.' };
+      }
+      // route to a recovery test
+      const test = makeTestForSource(source);
+      return { ...s, lives: newLives, test: { ...test, returnTo: s.screen, returnScene: s.scene } };
+    });
+  }, []);
+
+  const gainLife = useCallback(() => {
+    setState(s => ({ ...s, lives: Math.min(5, s.lives + 1) }));
+  }, []);
+
+  const makeTestForSource = (source) => {
+    if (source === 'public-private-1' || source === 'public-private-2') {
+      return {
+        type: 'mc',
+        question: 'Ποια πράξη χρησιμοποιούμε για να φτιάξουμε τον Δημόσιο-Ιδιωτικό Αριθμό σε αυτή την πίστα;',
+        options: ['Πρόσθεση Ιδιωτικού + Δημόσιου', 'Αφαίρεση Δημόσιου − Ιδιωτικού',
+                  'Πολλαπλασιασμός Ιδιωτικού × Δημόσιου', 'Διαίρεση Δημόσιου ÷ Ιδιωτικού'],
+        correctIndex: 2,
+        source,
+      };
+    }
+    if (source === 'common-secret-1' || source === 'common-secret-2') {
+      return {
+        type: 'mc',
+        question: 'Πώς υπολογίζει ο Παίκτης τον Κοινό Μυστικό Αριθμό;',
+        options: ['Δημ-Ιδ Master + Ιδιωτικός μου', 'Δημ-Ιδ Master × Ιδιωτικός μου',
+                  'Ιδιωτικός μου × Δημόσιος', 'Δημ-Ιδ Master × Δημ-Ιδ μου'],
+        correctIndex: 1,
+        source,
+      };
+    }
+    return {
+      type: 'mc',
+      question: 'Ποιος αριθμός είναι ορατός σε όλους (και στον ED);',
+      options: ['Ο Ιδιωτικός', 'Ο Δημόσιος', 'Ο Κοινός Μυστικός', 'Ο Ιδιωτικός του Master'],
+      correctIndex: 1,
+      source,
+    };
+  };
+
+  /* ----- Test handlers ----- */
+  const onTestPass = () => setState(s => ({ ...s, test: null }));
+  const onTestFail = () => setState(s => {
+    const newLives = s.lives - 1;
+    if (newLives <= 0) {
+      return { ...s, lives: 0, screen: 'game-over', test: null, edTimerActive: false,
+        gameOverReason: 'Απάντησες λάθος στο test και έχασες την τελευταία σου ζωή.' };
+    }
+    return { ...s, lives: newLives, test: null };
+  });
+
+  /* ----- Scene advancement ----- */
+  const advanceB1 = () => setState(s => {
+    if (s.scene === 4) {
+      // Building 1 complete
+      return { ...s, screen: 'map', scene: 1,
+        buildingsCompleted: [...new Set([...s.buildingsCompleted, 1])] };
+    }
+    return { ...s, scene: s.scene + 1 };
+  });
+
+  const advanceB2 = () => setState(s => {
+    if (s.scene === 8) {
+      return { ...s, screen: 'level-complete', edTimerActive: false,
+        buildingsCompleted: [...new Set([...s.buildingsCompleted, 2])] };
+    }
+    return { ...s, scene: s.scene + 1 };
+  });
+
+  const enterBuilding = (n) => {
+    if (n === 1) {
+      setState(s => ({ ...s, screen: 'building1', scene: 1,
+        player: { private: null, publicPrivate: null, commonSecret: null },
+        master: { private: MASTER_PRIVATE_B1, publicPrivate: null, commonSecret: null },
+      }));
+    } else {
+      setState(s => ({ ...s, screen: 'building2', scene: 5, building2Started: false,
+        player: { private: null, publicPrivate: null, commonSecret: null },
+        master: { private: MASTER_PRIVATE_B2, publicPrivate: null, commonSecret: null },
+        publicNumber: null, edTimer: ED_TOTAL_TIME, edTimerActive: false,
+      }));
+    }
+  };
+
+  /* ----- Render ----- */
+  // Test overlay takes precedence
+  if (state.test) {
+    return (
+      <MultipleChoiceTest
+        question={state.test.question}
+        options={state.test.options}
+        correctIndex={state.test.correctIndex}
+        onPass={onTestPass}
+        onFail={onTestFail}
+      />
+    );
+  }
+
+  if (state.screen === 'start') {
+    return <StartScreen onStart={() => setState(s => ({ ...s, screen: 'map' }))}/>;
+  }
+
+  if (state.screen === 'map') {
+    return <MapScreen
+      buildingsCompleted={state.buildingsCompleted}
+      lives={state.lives}
+      onEnterBuilding={enterBuilding}
+    />;
+  }
+
+  if (state.screen === 'level-complete') {
+    return <LevelCompleteScreen
+      commonSecret={state.player.commonSecret}
+      onNext={() => alert('Η Πίστα 2 θα δημιουργηθεί στη συνέχεια!')}
+    />;
+  }
+
+  if (state.screen === 'game-over') {
+    return <GameOverScreen reason={state.gameOverReason}
+      onRestart={() => setState(initialState())}/>;
+  }
+
+  if (state.screen === 'building1') {
+    const sceneInfo = SCENE_INFO_B1[state.scene - 1];
+    let scene;
+    if (state.scene === 1) scene = <Scene1_PickPrivate state={state} setState={setState} advance={advanceB1}/>;
+    else if (state.scene === 2) scene = <Scene2_MasterPicksPublic state={state} advance={advanceB1}/>;
+    else if (state.scene === 3) scene = <Scene3_PublicPrivate state={state} setState={setState} advance={advanceB1} loseLife={loseLife}/>;
+    else if (state.scene === 4) scene = <Scene4_CommonSecret state={state} setState={setState} advance={advanceB1} loseLife={loseLife} gainLife={gainLife}/>;
+    return (
+      <StageFrame lives={state.lives} levelName="Πίστα 1 — Κτήριο Α"
+                  sceneTitle={sceneInfo.title} sceneNum={sceneInfo.num} totalScenes={8}
+                  edTimer={null}>
+        {scene}
+      </StageFrame>
+    );
+  }
+
+  if (state.screen === 'building2') {
+    // Step 1: drag-drop test before scenes proceed
+    if (!state.building2Started) {
+      return (
+        <DragDropTest
+          onPass={() => setState(s => ({ ...s, building2Started: true }))}
+          onFail={() => setState(s => {
+            const newLives = s.lives - 1;
+            if (newLives <= 0) return { ...s, lives: 0, screen: 'game-over',
+              gameOverReason: 'Δεν θυμήθηκες τη σωστή σειρά των βημάτων.' };
+            return { ...s, lives: newLives };
+          })}
+        />
+      );
+    }
+    const sceneInfo = SCENE_INFO_B2[state.scene - 5];
+    let scene;
+    if (state.scene === 5) scene = <Scene5_NewPrivate state={state} setState={setState} advance={advanceB2}/>;
+    else if (state.scene === 6) scene = <Scene6_PlayerPicksPublic state={state} setState={setState} advance={advanceB2}/>;
+    else if (state.scene === 7) scene = <Scene7_PublicPrivateB2 state={state} setState={setState} advance={advanceB2} loseLife={loseLife}/>;
+    else if (state.scene === 8) scene = <Scene8_CommonSecretB2 state={state} setState={setState} advance={advanceB2} loseLife={loseLife} gainLife={gainLife}/>;
+    return (
+      <StageFrame lives={state.lives} levelName="Πίστα 1 — Κτήριο Β"
+                  sceneTitle={sceneInfo.title} sceneNum={sceneInfo.num} totalScenes={8}
+                  edTimer={state.edTimerActive ? state.edTimer : null}
+                  edTotalTime={ED_TOTAL_TIME}>
+        {scene}
+      </StageFrame>
+    );
+  }
+
+  return null;
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
